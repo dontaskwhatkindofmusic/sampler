@@ -12,20 +12,22 @@ const gestureTime=e=>e.timeStamp??Date.now();
 const HOLD_GESTURE_MS=350;
 let deleteMode='off',deleteCandidate=null;const deleteSelection=new Set();
 let microphone=null,microphoneRequest=null;
+function setAudioSession(type){try{if(typeof navigator!=='undefined'&&navigator.audioSession)navigator.audioSession.type=type}catch{}}
+function releaseMicrophone(){microphone?.getTracks().forEach(t=>t.stop());microphone=null;setAudioSession('playback');if($('micCheck'))$('micCheck').textContent='check microphone'}
 async function requestMicrophone(){
  if(microphone?.getAudioTracks().some(t=>t.readyState==='live'))return microphone;
  if(!navigator.mediaDevices?.getUserMedia)throw Error('Microphone needs HTTPS and browser permission.');
- if(!microphoneRequest){microphoneRequest=navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}}).then(s=>{microphone=s;return s}).finally(()=>microphoneRequest=null)}
+ if(!microphoneRequest){setAudioSession('auto');microphoneRequest=navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}}).then(s=>{microphone=s;setAudioSession('play-and-record');return s}).finally(()=>microphoneRequest=null)}
  return microphoneRequest;
 }
 function cancelEmptyHold(){}function cancelEmptyHolds(){}
 const emptyHint=k=>k+' is empty. Tap to record or import audio.';
 function resetDelete(){deleteMode='off';deleteCandidate=null;deleteSelection.clear();renderDelete()}
-function renderDelete(){const button=$('deleteMode');if(button){button.textContent=deleteMode==='bulk'?'delete ('+deleteSelection.size+')':deleteMode==='single'?'cancel delete':'delete';button.setAttribute('aria-pressed',deleteMode!=='off')}for(const k of letters)$('pad'+k).dataset.delete=deleteSelection.has(k)||deleteCandidate===k}
+function renderDelete(){const button=$('deleteMode');if(button){const count=deleteMode==='bulk'?deleteSelection.size:deleteCandidate?1:0;button.textContent=deleteMode==='off'?'delete':count?'delete ('+count+')':'cancel delete';button.setAttribute('aria-pressed',deleteMode!=='off')}for(const k of letters)$('pad'+k).dataset.delete=deleteSelection.has(k)||deleteCandidate===k}
 function deletePad(k){
  if(!p.samples[k]){say(k+' is empty.');return}
  if(deleteMode==='bulk'){deleteSelection.has(k)?deleteSelection.delete(k):deleteSelection.add(k);say(deleteSelection.size+' selected · tap Delete to remove.');renderDelete();return}
- if(deleteCandidate===k){eraseMany([k]);resetDelete()}else{deleteCandidate=k;say(k+' · tap again to delete.');renderDelete()}
+ deleteCandidate=deleteCandidate===k?null:k;say(deleteCandidate?k+' selected · tap Delete.':'No pads selected · cancel delete.');renderDelete()
 }
 async function activatePad(k){
  if(!ready)return;
@@ -55,7 +57,7 @@ function renderSteps(){[...$('steps').children].forEach((b,i)=>{b.disabled=i>=p.
 function render(){for(const k of letters){const b=$('pad'+k),s=p.samples[k];b.dataset.loaded=!!s;b.setAttribute('aria-pressed',mobileUI?multiSelected.has(k):selected===k);b.querySelector('small').textContent=s?s.name:'—';b.title=k+(s?' · '+s.name:' · empty')}$('bpm').value=p.bpm;$('length').value=p.length;$('division').value=p.division;renderSteps();editor();renderDelete()}
 function editor(){const s=p.samples[selected];$('selected').textContent='selected: '+selected+(mobileUI?'':' [←/→]');$('sampleName').value=s?.name||'';$('gain').value=s?.gain??1;$('reverse').checked=s?.reverse||false;$('start').value=s?.start||0;$('end').value=s?.end||0;$('size').textContent=s?(s.blob.size/1024).toFixed(1)+' KB · '+buffers[selected]?.duration.toFixed(2)+' s':'empty';for(const id of ['sampleName','gain','reverse','start','end','erase'])$(id).disabled=!s}
 function flash(k,when,length=.09){const handle=setTimeout(()=>{visuals.delete(handle);const b=$('pad'+k);b.playingCount=(b.playingCount||0)+1;b.classList.add('hit');const off=setTimeout(()=>{visuals.delete(off);b.playingCount=Math.max(0,(b.playingCount||0)-1);if(!b.playingCount)b.classList.remove('hit')},Math.max(90,length*1000));visuals.add(off)},Math.max(0,(when-ctx.currentTime)*1000));visuals.add(handle)}
-function trigger(k,when=ctx.currentTime){const s=p.samples[k],buf=buffers[k];if(!s||!buf)return;const source=ctx.createBufferSource(),gain=ctx.createGain();let data=buf,offset=s.start;if(s.reverse){if(!reversed[k]){const b=ctx.createBuffer(1,buf.length,buf.sampleRate);b.copyToChannel(Float32Array.from(buf.getChannelData(0)).reverse(),0);reversed[k]=b}data=reversed[k];offset=buf.duration-s.end}source.buffer=data;const rate=2**((s.pitch||0)/12);source.playbackRate.value=rate;gain.gain.value=s.gain;const filter=ctx.createBiquadFilter(),pan=ctx.createStereoPanner();filter.type='lowpass';filter.frequency.value=s.cutoff??20000;pan.pan.value=s.pan||0;source.connect(filter).connect(pan).connect(gain).connect(master);voices.add(source);source.onended=()=>{voices.delete(source);source.disconnect();filter.disconnect();pan.disconnect();gain.disconnect()};const length=Math.max(.005,s.end-s.start);source.start(when,Math.max(0,offset),length);flash(k,when,length/rate)}
+function trigger(k,when=ctx.currentTime){const s=p.samples[k],buf=buffers[k];if(!s||!buf)return;const source=ctx.createBufferSource(),gain=ctx.createGain();let data=buf,offset=s.start;if(s.reverse){if(!reversed[k]){const b=ctx.createBuffer(1,buf.length,buf.sampleRate);b.copyToChannel(Float32Array.from(buf.getChannelData(0)).reverse(),0);reversed[k]=b}data=reversed[k];offset=buf.duration-s.end}source.buffer=data;const rate=2**((s.pitch||0)/12);source.playbackRate.value=rate;gain.gain.value=s.gain;const effects=[];let tail=source;if((s.cutoff??20000)<20000){const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=s.cutoff;tail.connect(filter);tail=filter;effects.push(filter)}if(s.pan){const pan=ctx.createStereoPanner();pan.pan.value=s.pan;tail.connect(pan);tail=pan;effects.push(pan)}tail.connect(gain).connect(master);voices.add(source);source.onended=()=>{voices.delete(source);source.disconnect();for(const effect of effects)effect.disconnect();gain.disconnect()};const length=Math.max(.005,s.end-s.start);source.start(when,Math.max(0,offset),length);flash(k,when,length/rate)}
 function click(when,accent){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=accent?1400:950;g.gain.setValueAtTime(.12,when);g.gain.exponentialRampToValueAtTime(.001,when+.035);o.connect(g).connect(master);voices.add(o);o.onended=()=>{voices.delete(o);o.disconnect();g.disconnect()};o.start(when);o.stop(when+.04)}
 const stepTimeline=[];
 const duration=()=>60/p.bpm*p.division;
@@ -84,8 +86,8 @@ registerProcessor('hold-capture',HoldCapture);
 let captureModule=null;
 function recordingUI(){const on=recordHeld||held.has('Backquote');$('record').setAttribute('aria-pressed',on);$('record').textContent=mobileUI?'hold record':'hold record [`]';}
 function releaseRecord(){cancelEmptyHolds();recordHeld=false;held.delete('Backquote');recordingUI();finishRecording()}
-function disposeCapture(session){clearTimeout(session.countdown);session.input?.disconnect();session.node?.disconnect();$('pad'+session.key).classList.remove('recording','waiting');}
-function resetCapture(session){disposeCapture(session);if(recorder===session){recorder=null;pending=false;recordKey=null;$('stopRecord').disabled=true;$('inputLevel').textContent='input: —'}}
+function disposeCapture(session){clearTimeout(session.countdown);session.input?.disconnect();session.node?.disconnect();$('pad'+session.key).classList.remove('recording','waiting');if(!recorder)releaseMicrophone();}
+function resetCapture(session){disposeCapture(session);if(recorder===session){recorder=null;pending=false;recordKey=null;releaseMicrophone();$('stopRecord').disabled=true;$('inputLevel').textContent='input: —'}}
 async function startRecording(k,mode='hold'){
  if(importing)throw Error('Wait for the audio import to finish.');
  if(recorder||pending){say('Finish the current recording first.');return}
@@ -209,4 +211,4 @@ render();const opening=indexedDB.open('letter-sampler',1);opening.onupgradeneede
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stop();held.clear();keyCaptureStarted.clear();releaseRecord()}});
 
-window.addEventListener('pagehide',()=>{finishRecording();microphone?.getTracks().forEach(t=>t.stop());microphone=null});
+window.addEventListener('pagehide',()=>{finishRecording();releaseMicrophone()});
