@@ -1,4 +1,5 @@
 'use strict';
+const mobileUI=document.documentElement?.dataset.mobile==='true';
 const $=id=>document.getElementById(id), letters='QWERTYUIOPASDFGHJKLZXCVBNM';
 const fresh=()=>({bpm:110,length:8,division:1,samples:{},pattern:Array.from({length:10},()=>[])});
 let p=fresh(), project=0, db, ctx, master, selected='K', ready=false, playing=false, timer, nextTime=0, nextStep=0, origin=0, recordHeld=false, recorder=null, recordKey=null, pending=false, undo=null, importing=false;
@@ -7,9 +8,16 @@ const say=t=>$('status').textContent=t;
 const fail=e=>say(e.message||String(e));
 const guard=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(fail)}catch(e){fail(e)}};
 for(let n=1;n<=10;n++)$('length').add(new Option(n,n));
-for(const row of ['QWERTYUIOP','ASDFGHJKL','ZXCVBNM']){const div=document.createElement('div');div.className='row';for(const k of row){const b=document.createElement('button');b.id='pad'+k;b.innerHTML=k+'<small>—</small>';b.onclick=guard(()=>{if(b.recordPress){b.recordPress=false;return}return perform(k)});
-b.onpointerdown=guard(async e=>{if(e.button!==0||!(recordHeld||held.has('Backquote')))return;e.preventDefault();b.recordPress=true;b.setPointerCapture(e.pointerId);await perform(k)});
-b.onpointerup=()=>{if(b.recordPress)finishRecording()};b.onpointercancel=()=>{if(b.recordPress){b.recordPress=false;finishRecording()}};b.onlostpointercapture=()=>{if(b.recordPress)finishRecording()};
+for(const row of ['QWERTYUIOP','ASDFGHJKL','ZXCVBNM']){const div=document.createElement('div');div.className='row';for(const k of row){const b=document.createElement('button');b.id='pad'+k;b.innerHTML=k+'<small>—</small>';b.onclick=guard(e=>{if(e?.detail>0&&b.suppressClick)return;return perform(k)});
+b.onpointerdown=guard(async e=>{
+ if(e.button!==0)return;
+ const recording=recordHeld||held.has('Backquote');
+ if(!recording&&e.pointerType!=='touch'&&e.pointerType!=='pen'){b.suppressClick=false;return}
+ e.preventDefault();b.suppressClick=true;b.capturePointer=recording?e.pointerId:null;b.setPointerCapture(e.pointerId);
+ await perform(k);
+});
+const releasePad=e=>{if(b.capturePointer===e.pointerId){b.capturePointer=null;if(recordKey===k)finishRecording()}};
+b.onpointerup=releasePad;b.onpointercancel=releasePad;b.onlostpointercapture=releasePad;
 b.ondragover=e=>{if(!Array.from(e.dataTransfer?.types||[]).includes('Files'))return;e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect=ready&&!recorder&&!pending&&!importing?'copy':'none';b.classList.add('dragover')};
 b.ondragleave=e=>{if(!b.contains(e.relatedTarget))b.classList.remove('dragover')};
 b.ondrop=guard(async e=>{e.preventDefault();e.stopPropagation();b.classList.remove('dragover');const files=Array.from(e.dataTransfer?.files||[]);if(files.length!==1)throw Error('Drop one audio file onto a letter at a time.');await importAudio(files[0],k)});
@@ -19,14 +27,14 @@ async function audio(){if(!ctx){ctx=new AudioContext({latencyHint:'interactive'}
 function save(){if(!db){$('saved').textContent='not saved · storage unavailable';return}const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(p,project);$('saved').textContent='saving…';tx.oncomplete=()=>$('saved').textContent='saved in this browser';tx.onerror=()=>{$('saved').textContent='save failed · export a backup';fail(tx.error)}}
 function renderSteps(){[...$('steps').children].forEach((b,i)=>{b.disabled=i>=p.length;b.setAttribute('aria-pressed',chosen.has(i)||held.has('Digit'+((i+1)%10)));b.querySelector('span').textContent=p.pattern[i].join('').toLowerCase()||'—';b.title='Step '+(i+1)+': '+(p.pattern[i].join(', ')||'empty')});$('meter').textContent='· '+(p.length*p.division/4)+' bars of 4/4'}
 function render(){for(const k of letters){const b=$('pad'+k),s=p.samples[k];b.dataset.loaded=!!s;b.setAttribute('aria-pressed',selected===k);b.querySelector('small').textContent=s?s.name:'—';b.title=k+(s?' · '+s.name:' · empty')}$('bpm').value=p.bpm;$('length').value=p.length;$('division').value=p.division;renderSteps();editor()}
-function editor(){const s=p.samples[selected];$('selected').textContent='selected: '+selected+' [←/→]';$('sampleName').value=s?.name||'';$('gain').value=s?.gain??1;$('reverse').checked=s?.reverse||false;$('start').value=s?.start||0;$('end').value=s?.end||0;$('size').textContent=s?(s.blob.size/1024).toFixed(1)+' KB · '+buffers[selected]?.duration.toFixed(2)+' s':'empty';for(const id of ['sampleName','gain','reverse','start','end','erase'])$(id).disabled=!s}
+function editor(){const s=p.samples[selected];$('selected').textContent='selected: '+selected+(mobileUI?'':' [←/→]');$('sampleName').value=s?.name||'';$('gain').value=s?.gain??1;$('reverse').checked=s?.reverse||false;$('start').value=s?.start||0;$('end').value=s?.end||0;$('size').textContent=s?(s.blob.size/1024).toFixed(1)+' KB · '+buffers[selected]?.duration.toFixed(2)+' s':'empty';for(const id of ['sampleName','gain','reverse','start','end','erase'])$(id).disabled=!s}
 function flash(k,when){const handle=setTimeout(()=>{visuals.delete(handle);const b=$('pad'+k);b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),90)},Math.max(0,(when-ctx.currentTime)*1000));visuals.add(handle)}
 function trigger(k,when=ctx.currentTime){const s=p.samples[k],buf=buffers[k];if(!s||!buf)return;const source=ctx.createBufferSource(),gain=ctx.createGain();let data=buf,offset=s.start;if(s.reverse){if(!reversed[k]){const b=ctx.createBuffer(1,buf.length,buf.sampleRate);b.copyToChannel(Float32Array.from(buf.getChannelData(0)).reverse(),0);reversed[k]=b}data=reversed[k];offset=buf.duration-s.end}source.buffer=data;gain.gain.value=s.gain;source.connect(gain).connect(master);voices.add(source);source.onended=()=>{voices.delete(source);source.disconnect();gain.disconnect()};source.start(when,Math.max(0,offset),Math.max(.005,s.end-s.start));flash(k,when)}
 function click(when,accent){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=accent?1400:950;g.gain.setValueAtTime(.12,when);g.gain.exponentialRampToValueAtTime(.001,when+.035);o.connect(g).connect(master);voices.add(o);o.onended=()=>{voices.delete(o);o.disconnect();g.disconnect()};o.start(when);o.stop(when+.04)}
 const duration=()=>60/p.bpm*p.division;
 function schedule(){while(playing&&nextTime<ctx.currentTime+.10){const step=nextStep,t=nextTime;for(const k of p.pattern[step])trigger(k,t);if($('metro').checked)click(t,step===0);const handle=setTimeout(()=>{visuals.delete(handle);[...$('steps').children].forEach((b,i)=>b.classList.toggle('now',i===step))},Math.max(0,(t-ctx.currentTime)*1000));visuals.add(handle);nextTime+=duration();nextStep=(nextStep+1)%p.length}}
-function stop(){playing=false;clearInterval(timer);for(const s of voices){try{s.stop()}catch{}}voices.clear();for(const h of visuals)clearTimeout(h);visuals.clear();$('play').textContent='play [space]';for(const b of $('steps').children)b.classList.remove('now')}
-async function toggle(){if(!ready)return;if(playing){stop();return}await audio();playing=true;origin=nextTime=ctx.currentTime+.03;nextStep=0;$('play').textContent='stop [space]';schedule();timer=setInterval(schedule,25)}
+function stop(){playing=false;clearInterval(timer);for(const s of voices){try{s.stop()}catch{}}voices.clear();for(const h of visuals)clearTimeout(h);visuals.clear();$('play').textContent=mobileUI?'play':'play [space]';for(const b of $('steps').children)b.classList.remove('now')}
+async function toggle(){if(!ready)return;if(playing){stop();return}await audio();playing=true;origin=nextTime=ctx.currentTime+.03;nextStep=0;$('play').textContent=mobileUI?'stop':'stop [space]';schedule();timer=setInterval(schedule,25)}
 async function perform(k){if(!ready)return;selected=k;render();if(held.has('Backspace')||held.has('Delete')){erase(k);return}if(recordHeld||held.has('Backquote')){await startRecording(k);return}const steps=new Set(chosen);for(let i=0;i<p.length;i++)if(held.has('Digit'+((i+1)%10)))steps.add(i);if(steps.size){if(!p.samples[k]){say(k+' is empty. Record or import a sample first.');return}for(const i of steps){if(i>=p.length)continue;const row=p.pattern[i],at=row.indexOf(k);at<0?row.push(k):row.splice(at,1)}save();renderSteps();return}await audio();if(!buffers[k]){say(k+' is empty. Record or import audio to this letter.');return}trigger(k);if(playing&&$('overdub').checked){const step=((Math.round((ctx.currentTime-origin)/duration())%p.length)+p.length)%p.length;if(!p.pattern[step].includes(k))p.pattern[step].push(k);save();renderSteps()}}
 async function install(k,blob,name){const target=p;const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());if(p!==target)throw Error('Project changed before audio was ready. Import it again.');if(buffer.duration<.01)throw Error('Recording was too short. Try again.');buffers[k]=buffer;delete reversed[k];p.samples[k]={blob,name,start:0,end:buffer.duration,gain:1,reverse:false};save();render();say(k+' ready · '+buffer.duration.toFixed(2)+' seconds.')}
 // Capture on the audio thread: threshold detection and a 20 ms pre-roll do
@@ -47,7 +55,7 @@ class HoldCapture extends AudioWorkletProcessor {
 registerProcessor('hold-capture',HoldCapture);
 `;
 let captureModule=null;
-function recordingUI(){const on=recordHeld||held.has('Backquote');$('record').setAttribute('aria-pressed',on);$('record').textContent='hold record [`]';}
+function recordingUI(){const on=recordHeld||held.has('Backquote');$('record').setAttribute('aria-pressed',on);$('record').textContent=mobileUI?'hold record':'hold record [`]';}
 function releaseRecord(){recordHeld=false;held.delete('Backquote');recordingUI();finishRecording()}
 function disposeCapture(session){clearTimeout(session.countdown);session.input?.disconnect();session.node?.disconnect();session.stream?.getTracks().forEach(t=>t.stop());$('pad'+session.key).classList.remove('recording','waiting');}
 function resetCapture(session){disposeCapture(session);if(recorder===session){recorder=null;pending=false;recordKey=null;$('stopRecord').disabled=true;$('inputLevel').textContent='input: —'}}
@@ -145,6 +153,7 @@ window.addEventListener('keydown',guard(async e=>{
 if(e.metaKey||e.ctrlKey||e.altKey||e.isComposing)return;
 const code=e.code;
 if(code==='Escape'){e.preventDefault();$('panic').click();e.target.blur?.();return}
+if(e.target.closest?.('dialog[open]'))return;
 if(e.target.matches('input,select,textarea,[contenteditable="true"]')){
 if(code==='Enter'&&!e.shiftKey){e.preventDefault();e.target.blur()}
 return;
