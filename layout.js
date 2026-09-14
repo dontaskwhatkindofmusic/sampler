@@ -7,3 +7,5 @@ document.getElementById('desktopStyle').disabled=useTouchLayout;
 document.getElementById('touchStyle').disabled=!useTouchLayout;
 const layoutTemplate=document.getElementById(useTouchLayout?'touchLayout':'desktopLayout');
 document.body.insertBefore(layoutTemplate.content.cloneNode(true),document.getElementById('desktopLayout'));
+
+if(useTouchLayout){const bpm=document.getElementById('bpm');for(let n=30;n<=300;n++)bpm.add(new Option(n,n));bpm.value='110';}
