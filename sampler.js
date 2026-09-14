@@ -7,16 +7,33 @@ const buffers={}, reversed={}, held=new Set(), chosen=new Set(), voices=new Set(
 const say=t=>$('status').textContent=t;
 const fail=e=>say(e.message||String(e));
 const guard=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(fail)}catch(e){fail(e)}};
+const emptyHolds=new Map();
+const emptyHint=k=>k+' is empty. Hold to record or import audio to this letter.';
+function cancelEmptyHold(k,token){const hold=emptyHolds.get(k);if(!hold||(token!==undefined&&hold.token!==token))return;clearTimeout(hold.timer);emptyHolds.delete(k);$('pad'+k).classList.remove('holding')}
+function cancelEmptyHolds(){for(const k of emptyHolds.keys())cancelEmptyHold(k)}
+function beginEmptyHold(k,token){
+ if(!ready||p.samples[k]||recorder||importing||emptyHolds.has(k))return;
+ const projectAtPress=p;const hold={token,timer:null};emptyHolds.set(k,hold);selected=k;render();say(emptyHint(k));$('pad'+k).classList.add('holding');
+ // Unlock audio in the original gesture; do not request the microphone on a tap.
+ audio().catch(fail);
+ hold.timer=setTimeout(guard(async()=>{
+  if(emptyHolds.get(k)!==hold)return;cancelEmptyHold(k,token);
+  if(p!==projectAtPress||p.samples[k]||recorder||importing||!ready)return;
+  await startRecording(k);
+ }),2000);
+}
 for(let n=1;n<=10;n++)$('length').add(new Option(n,n));
 for(const row of ['QWERTYUIOP','ASDFGHJKL','ZXCVBNM']){const div=document.createElement('div');div.className='row';for(const k of row){const b=document.createElement('button');b.id='pad'+k;b.innerHTML=k+'<small>—</small>';b.onclick=guard(e=>{if(e?.detail>0&&b.suppressClick)return;return perform(k)});
 b.onpointerdown=guard(async e=>{
- if(e.button!==0)return;
+ if(e.button!==0||b.activePointer!=null)return;
  const recording=recordHeld||held.has('Backquote');
- if(!recording&&e.pointerType!=='touch'&&e.pointerType!=='pen'){b.suppressClick=false;return}
- e.preventDefault();b.suppressClick=true;b.capturePointer=recording?e.pointerId:null;b.setPointerCapture(e.pointerId);
+ const empty=!p.samples[k]&&!held.has('Backspace')&&!held.has('Delete');
+ if(!recording&&!empty&&e.pointerType!=='touch'&&e.pointerType!=='pen'){b.suppressClick=false;return}
+ e.preventDefault();b.activePointer=e.pointerId;b.suppressClick=true;b.capturePointer=recording||empty?e.pointerId:null;b.setPointerCapture(e.pointerId);
+ if(empty&&!recording){beginEmptyHold(k,'pointer:'+e.pointerId);return}
  await perform(k);
 });
-const releasePad=e=>{if(b.capturePointer===e.pointerId){b.capturePointer=null;if(recordKey===k)finishRecording()}};
+const releasePad=e=>{if(b.activePointer!==e.pointerId)return;b.activePointer=null;cancelEmptyHold(k,'pointer:'+e.pointerId);if(b.capturePointer===e.pointerId){b.capturePointer=null;if(recordKey===k)finishRecording()}};
 b.onpointerup=releasePad;b.onpointercancel=releasePad;b.onlostpointercapture=releasePad;
 b.ondragover=e=>{if(!Array.from(e.dataTransfer?.types||[]).includes('Files'))return;e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect=ready&&!recorder&&!pending&&!importing?'copy':'none';b.classList.add('dragover')};
 b.ondragleave=e=>{if(!b.contains(e.relatedTarget))b.classList.remove('dragover')};
@@ -35,8 +52,8 @@ const duration=()=>60/p.bpm*p.division;
 function schedule(){while(playing&&nextTime<ctx.currentTime+.10){const step=nextStep,t=nextTime;for(const k of p.pattern[step])trigger(k,t);if($('metro').checked)click(t,step===0);const handle=setTimeout(()=>{visuals.delete(handle);[...$('steps').children].forEach((b,i)=>b.classList.toggle('now',i===step))},Math.max(0,(t-ctx.currentTime)*1000));visuals.add(handle);nextTime+=duration();nextStep=(nextStep+1)%p.length}}
 function stop(){playing=false;clearInterval(timer);for(const s of voices){try{s.stop()}catch{}}voices.clear();for(const h of visuals)clearTimeout(h);visuals.clear();$('play').textContent=mobileUI?'play':'play [space]';for(const b of $('steps').children)b.classList.remove('now')}
 async function toggle(){if(!ready)return;if(playing){stop();return}await audio();playing=true;origin=nextTime=ctx.currentTime+.03;nextStep=0;$('play').textContent=mobileUI?'stop':'stop [space]';schedule();timer=setInterval(schedule,25)}
-async function perform(k){if(!ready)return;selected=k;render();if(held.has('Backspace')||held.has('Delete')){erase(k);return}if(recordHeld||held.has('Backquote')){await startRecording(k);return}const steps=new Set(chosen);for(let i=0;i<p.length;i++)if(held.has('Digit'+((i+1)%10)))steps.add(i);if(steps.size){if(!p.samples[k]){say(k+' is empty. Record or import a sample first.');return}for(const i of steps){if(i>=p.length)continue;const row=p.pattern[i],at=row.indexOf(k);at<0?row.push(k):row.splice(at,1)}save();renderSteps();return}await audio();if(!buffers[k]){say(k+' is empty. Record or import audio to this letter.');return}trigger(k);if(playing&&$('overdub').checked){const step=((Math.round((ctx.currentTime-origin)/duration())%p.length)+p.length)%p.length;if(!p.pattern[step].includes(k))p.pattern[step].push(k);save();renderSteps()}}
-async function install(k,blob,name){const target=p;const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());if(p!==target)throw Error('Project changed before audio was ready. Import it again.');if(buffer.duration<.01)throw Error('Recording was too short. Try again.');buffers[k]=buffer;delete reversed[k];p.samples[k]={blob,name,start:0,end:buffer.duration,gain:1,reverse:false};save();render();say(k+' ready · '+buffer.duration.toFixed(2)+' seconds.')}
+async function perform(k){if(!ready)return;selected=k;render();if(held.has('Backspace')||held.has('Delete')){erase(k);return}if(recordHeld||held.has('Backquote')){await startRecording(k);return}const steps=new Set(chosen);for(let i=0;i<p.length;i++)if(held.has('Digit'+((i+1)%10)))steps.add(i);if(steps.size){if(!p.samples[k]){say(emptyHint(k));return}for(const i of steps){if(i>=p.length)continue;const row=p.pattern[i],at=row.indexOf(k);at<0?row.push(k):row.splice(at,1)}save();renderSteps();return}await audio();if(!buffers[k]){say(emptyHint(k));return}trigger(k);if(playing&&$('overdub').checked){const step=((Math.round((ctx.currentTime-origin)/duration())%p.length)+p.length)%p.length;if(!p.pattern[step].includes(k))p.pattern[step].push(k);save();renderSteps()}}
+async function install(k,blob,name){cancelEmptyHold(k);const target=p;const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());if(p!==target)throw Error('Project changed before audio was ready. Import it again.');if(buffer.duration<.01)throw Error('Recording was too short. Try again.');buffers[k]=buffer;delete reversed[k];p.samples[k]={blob,name,start:0,end:buffer.duration,gain:1,reverse:false};save();render();say(k+' ready · '+buffer.duration.toFixed(2)+' seconds.')}
 // Capture on the audio thread: threshold detection and a 20 ms pre-roll do
 // not depend on page timers, so short attacks survive a threshold trigger.
 const captureProcessor = `
@@ -56,7 +73,7 @@ registerProcessor('hold-capture',HoldCapture);
 `;
 let captureModule=null;
 function recordingUI(){const on=recordHeld||held.has('Backquote');$('record').setAttribute('aria-pressed',on);$('record').textContent=mobileUI?'hold record':'hold record [`]';}
-function releaseRecord(){recordHeld=false;held.delete('Backquote');recordingUI();finishRecording()}
+function releaseRecord(){cancelEmptyHolds();recordHeld=false;held.delete('Backquote');recordingUI();finishRecording()}
 function disposeCapture(session){clearTimeout(session.countdown);session.input?.disconnect();session.node?.disconnect();session.stream?.getTracks().forEach(t=>t.stop());$('pad'+session.key).classList.remove('recording','waiting');}
 function resetCapture(session){disposeCapture(session);if(recorder===session){recorder=null;pending=false;recordKey=null;$('stopRecord').disabled=true;$('inputLevel').textContent='input: —'}}
 async function startRecording(k){
@@ -66,7 +83,7 @@ async function startRecording(k){
  if(limit>12)throw Error('This cycle exceeds 12 seconds. Shorten it or increase the tempo first.');
  const session={key:k,project:p,state:'opening',limit,threshold:$('thresholdOn').checked?Number($('thresholdDb').value):-Infinity};
  recorder=session;pending=true;recordKey=k;$('stopRecord').disabled=false;
- $('pad'+k).classList.add('waiting');say('Opening microphone for '+k+' · keep both keys held…');
+ $('pad'+k).classList.add('waiting');say('Opening microphone for '+k+' · keep holding…');
  try{
   await audio();
   if(recorder!==session)return;
@@ -128,7 +145,7 @@ $('import').onclick=()=>{if(recorder||pending||importing){say('Finish the curren
 window.addEventListener('dragover',e=>{if(Array.from(e.dataTransfer?.types||[]).includes('Files')){e.preventDefault();e.dataTransfer.dropEffect='none'}});
 window.addEventListener('drop',e=>{if(Array.from(e.dataTransfer?.types||[]).includes('Files')){e.preventDefault();say('Drop the audio file directly onto a letter.')}});
 $('demo').onclick=guard(async()=>{if(importing)throw Error('Wait for the audio import to finish.');await audio();for(const k of ['K','S','H']){if(p.samples[k])continue;const rate=22050,len=k==='K'?.4:k==='S'?.22:.09,b=ctx.createBuffer(1,rate*len,rate),d=b.getChannelData(0);let phase=0;for(let i=0;i<d.length;i++){const t=i/rate;phase+=2*Math.PI*(45+110*Math.exp(-t*35))/rate;d[i]=k==='K'?Math.sin(phase)*Math.exp(-t*14):(Math.random()*2-1)*Math.exp(-t*(k==='S'?25:65))*.65}await install(k,wav(b),{K:'kick',S:'snare',H:'hat'}[k])}say('K kick · S snare · H hat. Hold 1 + 5 and press K to start a pattern.')});
-async function load(n){$('project').disabled=true;stop();finishRecording();ready=false;project=n;chosen.clear();held.clear();undo=null;$('undo').disabled=true;for(const k of Object.keys(buffers))delete buffers[k];for(const k of Object.keys(reversed))delete reversed[k];p=db?await new Promise((resolve,reject)=>{const r=db.transaction('projects').objectStore('projects').get(n);r.onsuccess=()=>resolve(r.result||fresh());r.onerror=()=>reject(r.error)}):fresh();await audio();for(const [k,s]of Object.entries(p.samples)){try{buffers[k]=await ctx.decodeAudioData(await s.blob.arrayBuffer())}catch{say('Could not decode '+k+'. Re-import its audio.')}}ready=true;$('project').disabled=false;render()}
+async function load(n){cancelEmptyHolds();$('project').disabled=true;stop();finishRecording();ready=false;project=n;chosen.clear();held.clear();undo=null;$('undo').disabled=true;for(const k of Object.keys(buffers))delete buffers[k];for(const k of Object.keys(reversed))delete reversed[k];p=db?await new Promise((resolve,reject)=>{const r=db.transaction('projects').objectStore('projects').get(n);r.onsuccess=()=>resolve(r.result||fresh());r.onerror=()=>reject(r.error)}):fresh();await audio();for(const [k,s]of Object.entries(p.samples)){try{buffers[k]=await ctx.decodeAudioData(await s.blob.arrayBuffer())}catch{say('Could not decode '+k+'. Re-import its audio.')}}ready=true;$('project').disabled=false;render()}
 $('project').onchange=guard(async()=>{if(recorder||pending||importing){$('project').value=project;throw Error('Finish recording or importing before switching projects.')}await load(Number($('project').value));say('Project '+(project+1)+' ready.')});
 // One dispatch map keeps mouse actions, shortcuts, and disabled states in sync.
 const commands={
@@ -170,9 +187,9 @@ if(code==='Backslash'){e.preventDefault();$('clearSelection').click();return}
 if(code==='ArrowLeft'||code==='ArrowRight'){e.preventDefault();selectAdjacent(code==='ArrowLeft'?-1:1);return}
 if(code==='Space'){e.preventDefault();await toggle();return}
 if(['Backquote','Backspace','Delete'].includes(code)||/^Digit\d$/.test(code)){e.preventDefault();held.add(code);if(code==='Backquote'){recordingUI();say('Record held · hold a letter to capture.')}renderSteps();return}
-if(/^Key[A-Z]$/.test(code)){e.preventDefault();held.add(code);await perform(code.slice(3));if(recordKey===code.slice(3)&&!held.has(code))finishRecording()}
+if(/^Key[A-Z]$/.test(code)){e.preventDefault();held.add(code);const k=code.slice(3);if(!p.samples[k]&&!recordHeld&&!held.has('Backquote')&&!held.has('Backspace')&&!held.has('Delete')){beginEmptyHold(k,code);return}await perform(k);if(recordKey===code.slice(3)&&!held.has(code))finishRecording()}
 }));
-window.addEventListener('keyup',e=>{held.delete(e.code);renderSteps();if(e.code==='Backquote')recordingUI();if(recordKey&&(e.code==='Key'+recordKey||e.code==='Backquote'))finishRecording()});
+window.addEventListener('keyup',e=>{held.delete(e.code);if(/^Key[A-Z]$/.test(e.code))cancelEmptyHold(e.code.slice(3),e.code);renderSteps();if(e.code==='Backquote')recordingUI();if(recordKey&&(e.code==='Key'+recordKey||e.code==='Backquote'))finishRecording()});
 window.addEventListener('blur',()=>{held.clear();renderSteps();releaseRecord()});
 $('export').onclick=guard(async()=>{const out={format:'letter-sampler-1',...p,samples:{}};for(const[k,s]of Object.entries(p.samples)){const bytes=new Uint8Array(await s.blob.arrayBuffer());let str='';for(const v of bytes)str+=String.fromCharCode(v);out.samples[k]={...s,blob:undefined,type:s.blob.type,data:btoa(str)}}const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:'application/json'}));a.href=url;a.download='letter-sampler-project-'+(project+1)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
 $('restore').onclick=()=>$('backup').click();$('backup').onchange=guard(async()=>{const f=$('backup').files[0];$('backup').value='';if(!f)return;if(recorder||pending||importing)throw Error('Finish recording or importing first.');if(f.size>30e6)throw Error('Backup is too large.');const x=JSON.parse(await f.text());if(x.format!=='letter-sampler-1'||!Number.isFinite(x.bpm)||x.bpm<30||x.bpm>300||!Number.isInteger(x.length)||x.length<1||x.length>10||![1,.5,.25].includes(x.division)||!Array.isArray(x.pattern)||x.pattern.length!==10||!x.pattern.every(a=>Array.isArray(a)&&a.every(k=>letters.includes(k)&&k.length===1))||!x.samples)throw Error('Invalid project backup.');await audio();const decoded={};for(const[k,s]of Object.entries(x.samples)){if(k.length!==1||!letters.includes(k)||typeof s.name!=='string')throw Error('Invalid sample.');s.blob=new Blob([Uint8Array.from(atob(s.data),c=>c.charCodeAt(0))],{type:s.type});decoded[k]=await ctx.decodeAudioData(await s.blob.arrayBuffer());if(decoded[k].duration>12.5||![s.start,s.end,s.gain].every(Number.isFinite)||s.start<0||s.end>decoded[k].duration+.001||s.end<=s.start||s.gain<0||s.gain>1.5)throw Error('Invalid sample settings.');delete s.data;delete s.type}if(!confirm('Replace project '+(project+1)+' with this backup?'))return;stop();p=x;for(const k of Object.keys(buffers))delete buffers[k];for(const k of Object.keys(reversed))delete reversed[k];Object.assign(buffers,decoded);undo=null;$('undo').disabled=true;save();render();say('Project restored.')});

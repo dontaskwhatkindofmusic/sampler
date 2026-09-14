@@ -4,3 +4,5 @@
 
 #bankSelect{display:none}.value-button{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(orientation:landscape) and (max-height:550px){body{grid-template-rows:44px 44px minmax(44px,1fr) 30px}header{grid-column:2;grid-row:1;justify-content:flex-end}header h1{display:none}.transport{grid-row:2}main{grid-row:1/-1}nav{grid-row:3;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:44px}nav button{font-size:12px;padding:2px}#status{grid-row:4}#view-play{grid-template-columns:minmax(0,1fr) 100px;grid-template-rows:44px minmax(0,1fr)}#keyboard{grid-column:1;grid-row:1/-1;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(44px,1fr))}.banks{grid-column:2;grid-row:1}.banks button{display:none}#bankSelect{display:block;width:100%}.recordbar{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end}.recordbar #stopRecord{display:none}#inputLevel{min-height:26px}}
+
+button.holding{outline:2px dotted #777;outline-offset:-3px}

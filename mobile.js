@@ -25,11 +25,11 @@ for(const id of ['bpm','sampleName','start','end','thresholdDb']){
 }
 $('fieldApply').onclick=e=>{e.preventDefault();const field=$('fieldValue');if(!field.reportValidity())return;if(editingInput){editingInput.value=field.value;editingInput.onchange?.()}$('fieldDialog').close();syncMobile()};
 $('fieldDialog').addEventListener('close',()=>{editingInput=null;document.activeElement?.blur()});
-$('micCheck').onclick=guard(async()=>{if(recorder||importing)return;$('micCheck').disabled=true;try{await audio();const input=await navigator.mediaDevices.getUserMedia({audio:true});input.getTracks().forEach(t=>t.stop());say('Microphone allowed. In Play, hold Record + a pad with two fingers.')}finally{$('micCheck').disabled=false}});
+$('micCheck').onclick=guard(async()=>{if(recorder||importing)return;$('micCheck').disabled=true;try{await audio();const input=await navigator.mediaDevices.getUserMedia({audio:true});input.getTracks().forEach(t=>t.stop());say('Microphone allowed. Hold an empty pad for 2 seconds, then keep holding to record.')}finally{$('micCheck').disabled=false}});
 const helpPages=[
  ['play','Tap pads with one or several fingers. Sound starts on touch-down. Three banks hold the same 26 letter samples as the desktop instrument. Load K / S / H drums in Setup to start.'],
- ['record','First check the microphone in Setup. In Play, hold Record with one finger, then hold a pad with another. Release either to stop. A waiting pad has a dashed border; recording is red.'],
- ['threshold','In Setup, enable threshold and choose a dBFS value. −35 is a starting point; lower values are more sensitive. Hold Record + a pad: capture begins only when sound crosses the threshold.'],
+ ['record','Hold an empty pad for 2 seconds, then keep holding to record. A quick tap only shows a hint. Release to stop. For a loaded pad, use Record + pad to deliberately replace it. Check microphone permission in Setup first.'],
+ ['threshold','In Setup, enable threshold and choose a dBFS value. −35 is a starting point; lower values are more sensitive. Hold an empty pad for 2 seconds: it waits until sound crosses the threshold. Release before sound arrives to cancel without saving.'],
  ['steps','Select numbered steps, then return to Play and tap a sample. Tap again to remove it from those steps. Use “release steps” before playing freely. Space and keyboard shortcuts still work with a hardware keyboard.'],
  ['samples','Tap a pad to select it, then open Sample to import from Files, change its level, reverse, trim, or delete it. Use the arrows to select without playing. Recordings and imports are limited to 12 seconds.'],
  ['keep your work','Projects save in this browser. Export backups in Setup. Use Safari’s Share menu → Add to Home Screen for a standalone launch. Keep the app visible while playing; switching apps stops transport and recording.'],
