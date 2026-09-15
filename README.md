@@ -37,3 +37,11 @@ Setup → Clear All Pads clears only the current project after confirmation; Und
 A named pad whose stored audio is not decoded shows “retry,” rather than pretending it is playable. Both pads and the mobile Listen button retry decoding. Concurrent requests share one decode; deleted/replaced samples cannot be resurrected by late results. Demo drums wait for project loading and block overlapping imports/project changes. Corrupt saved audio is retained for backup/re-import, not silently discarded.
 
 Regression checks: run the files in `tests/` using Node from the repository root. These are logic checks, not a physical iPhone audio test.
+
+## Returning after screen lock
+
+The first pad/Play gesture after leaving the page rebuilds the audio output while retaining decoded buffers and saved sample data. The same recovery handles Safari's interrupted state and returning from the browser's page cache. A stalled resume times out with a retry message rather than hanging the instrument. Playback does not restart automatically in the background.
+
+Saved PCM16 WAV files—including built-in drums and the app's normalized recordings/imports—are read directly into audio buffers, avoiding the browser codec decoder on restoration. Other legacy encodings still use the native decoder. Invalid/truncated files remain preserved and report an error. An unfinished recording is cancelled when the page is hidden, preserving any previous saved sample; a take already being saved can finish.
+
+The screen-lock regression test simulates interruptions, silent/stuck output, a failed codec decoder and hung resume. Physical iPhone verification remains necessary.

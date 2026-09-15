@@ -55,11 +55,42 @@ let busCompressor,busDry,busWet;
 function normalizeProject(value){const x=value||fresh();x.pattern=Array.from({length:32},(_,i)=>Array.isArray(x.pattern?.[i])?x.pattern[i]:[]);x.length=Math.max(1,Math.min(32,Number(x.length)||8));x.bus={...busDefaults(),...x.bus};for(const [key,min,max] of [['gain',0,1.5],['threshold',-100,0],['ratio',1,20]])if(!Number.isFinite(x.bus[key])||x.bus[key]<min||x.bus[key]>max)x.bus[key]=busDefaults()[key];x.bus.compressor=x.bus.compressor!==false;return x}
 function applyBus(){if(!master)return;const b=p.bus||busDefaults();const set=(param,value)=>param.setTargetAtTime?param.setTargetAtTime(value,ctx.currentTime,.01):param.value=value;set(master.gain,b.gain);set(busCompressor.threshold,b.threshold);set(busCompressor.ratio,b.ratio);set(busDry.gain,b.compressor?0:1);set(busWet.gain,b.compressor?1:0)}
 function ensureAudio(){if(ctx&&ctx.state!=='closed')return;ctx=new AudioContext({latencyHint:'interactive'});captureModule=null;master=ctx.createGain();busCompressor=ctx.createDynamicsCompressor();busDry=ctx.createGain();busWet=ctx.createGain();master.connect(busDry).connect(ctx.destination);master.connect(busCompressor).connect(busWet).connect(ctx.destination);applyBus()}
-async function audio(){ensureAudio();if(ctx.state!=='running')await ctx.resume()}
+let rebuildOnGesture=false,audioUnlock=null;
+function rebuildAudio(){const previous=ctx;stop();ctx=null;master=null;captureModule=null;rebuildOnGesture=false;audioUnlock=null;if(previous){try{previous.close()?.catch(()=>{})}catch{}}ensureAudio();if(recorder)$('play').textContent=mobileUI?'stop':'stop [space / esc]'}
+function audio(){
+ // Rebuild inside the tap/key gesture, not in a background visibility callback.
+ // Buffers and saved samples survive; only the output graph is replaced.
+ if(rebuildOnGesture||ctx?.state==='interrupted')rebuildAudio();else ensureAudio();
+ if(ctx.state==='running')return Promise.resolve();if(audioUnlock)return audioUnlock;
+ const engine=ctx;let timeout;
+ const attempt=Promise.race([engine.resume(),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('Audio did not wake up. Tap a pad again to reconnect.')),2000)})]).then(()=>{if(ctx!==engine||engine.state!=='running')throw Error('Audio is interrupted. Tap a pad again to reconnect.')} ).catch(error=>{if(ctx===engine)rebuildOnGesture=true;throw error}).finally(()=>{clearTimeout(timeout);if(audioUnlock===attempt)audioUnlock=null});
+ audioUnlock=attempt;return attempt;
+}
+// Our recordings/imports/drums are PCM16 WAV. Read their sample values directly:
+// no codec service or live audio output is needed to recover browser storage.
+function decodePCM16(bytes,engine){
+ if(bytes.byteLength<12)return null;const view=new DataView(bytes);
+ const tag=at=>String.fromCharCode(...new Uint8Array(bytes,at,4));
+ if(tag(0)!=='RIFF'||tag(8)!=='WAVE')return null;
+ const end=view.getUint32(4,true)+8;if(end>bytes.byteLength||end<12)throw Error('Saved WAV is incomplete.');
+ let format=null,data=null;
+ for(let at=12;at+8<=end;){const size=view.getUint32(at+4,true),offset=at+8;if(offset+size>end)throw Error('Saved WAV is incomplete.');const kind=tag(at);
+ if(kind==='fmt '&&size>=16)format={encoding:view.getUint16(offset,true),channels:view.getUint16(offset+2,true),rate:view.getUint32(offset+4,true),align:view.getUint16(offset+12,true),bits:view.getUint16(offset+14,true)};
+ if(kind==='data')data={offset,size};at=offset+size+(size%2);
+ }
+ if(!format||!data)throw Error('Saved WAV has no audio data.');
+ if(format.encoding!==1||format.bits!==16)return null;
+ const {channels,rate,align}=format;if(channels<1||channels>2||align!==channels*2||rate<8000||rate>192000||!data.size||data.size%align)throw Error('Saved WAV format is invalid.');
+ const frames=data.size/align;if(frames/rate>12.5)throw Error('Saved sample exceeds 12 seconds.');
+ const buffer=engine.createBuffer(channels,frames,rate);
+ for(let channel=0;channel<channels;channel++){const dest=buffer.getChannelData(channel);for(let frame=0;frame<frames;frame++)dest[frame]=view.getInt16(data.offset+frame*align+channel*2,true)/32768;}
+ return buffer;
+}
+async function decodeStoredAudio(blob){const bytes=await blob.arrayBuffer();ensureAudio();return decodePCM16(bytes,ctx)||await ctx.decodeAudioData(bytes)}
 async function decodeSample(k,target=p){
  const sample=target.samples[k];if(!sample)return;
  if(decoding.has(sample))return decoding.get(sample);
- const task=(async()=>{ensureAudio();if(!sample.blob?.arrayBuffer)throw Error('Stored audio is missing.');const buf=await ctx.decodeAudioData(await sample.blob.arrayBuffer());if(p!==target||p.samples[k]!==sample)return;
+ const task=(async()=>{ensureAudio();if(!sample.blob?.arrayBuffer)throw Error('Stored audio is missing.');const buf=await decodeStoredAudio(sample.blob);if(p!==target||p.samples[k]!==sample)return;
  buffers[k]=buf;delete reversed[k];sample.start=Math.max(0,Math.min(Number(sample.start)||0,Math.max(0,buf.duration-.005)));sample.end=Math.max(sample.start+.001,Math.min(Number(sample.end)||buf.duration,buf.duration));sample.gain=Number.isFinite(sample.gain)?sample.gain:1;return buf})();
  decoding.set(sample,task);try{return await task}finally{decoding.delete(sample)}
 }
@@ -86,7 +117,7 @@ function schedule(){while(playing&&nextTime<ctx.currentTime+.10){const step=next
 function stop(){playing=false;clearInterval(timer);for(const s of voices){try{s.stop()}catch{}}voices.clear();for(const h of visuals)clearTimeout(h);visuals.clear();for(const k of letters){$('pad'+k).playingCount=0;$('pad'+k).classList.remove('hit')}$('play').textContent=mobileUI?'play':'play [space]';for(const b of $('steps').children)b.classList.remove('now')}
 async function toggle(){if(!ready){await audio();say('Loading saved samples · try again shortly.');return}if(playing||recorder){$('panic').click();return}await audio();playing=true;stepTimeline.length=0;origin=nextTime=ctx.currentTime+.03;nextStep=0;$('play').textContent=mobileUI?'stop':'stop [space / esc]';schedule();timer=setInterval(schedule,25)}
 async function perform(k){if(!ready)return;selected=k;render();if(held.has('Backspace')||held.has('Delete')){if(deleteMode==='off')deleteMode='bulk';deletePad(k);return}if(recordHeld||held.has('Backquote')){await startRecording(k);return}const steps=new Set(chosen);for(let i=0;i<p.length;i++)if(Math.floor(i/8)===stepPage&&held.has('Digit'+(i%8+1)))steps.add(i);if(steps.size){if(!p.samples[k]){say(emptyHint(k));return}for(const i of steps){if(i>=p.length)continue;const row=p.pattern[i],at=row.indexOf(k);at<0?row.push(k):row.splice(at,1)}save();renderSteps();say('Updated '+steps.size+' steps · release steps to play pads freely.');return}if(!await audition(k))return;if(playing&&$('overdub').checked){const candidates=[...stepTimeline,{step:nextStep,time:nextTime}];const step=candidates.reduce((a,b)=>Math.abs(a.time-ctx.currentTime)<Math.abs(b.time-ctx.currentTime)?a:b).step%p.length;if(!p.pattern[step].includes(k))p.pattern[step].push(k);save();renderSteps()}}
-async function install(k,blob,name){cancelEmptyHold(k);const target=p;const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());if(p!==target)throw Error('Project changed before audio was ready. Import it again.');if(buffer.duration<.01)throw Error('Recording was too short. Try again.');buffers[k]=buffer;delete reversed[k];p.samples[k]={blob,name,start:0,end:buffer.duration,gain:1,reverse:false};save();render();say(k+' ready · '+buffer.duration.toFixed(2)+' seconds.')}
+async function install(k,blob,name){cancelEmptyHold(k);const target=p;const buffer=await decodeStoredAudio(blob);if(p!==target)throw Error('Project changed before audio was ready. Import it again.');if(buffer.duration<.01)throw Error('Recording was too short. Try again.');buffers[k]=buffer;delete reversed[k];p.samples[k]={blob,name,start:0,end:buffer.duration,gain:1,reverse:false};save();render();say(k+' ready · '+buffer.duration.toFixed(2)+' seconds.')}
 // Capture on the audio thread: threshold detection and a 20 ms pre-roll do
 // not depend on page timers, so short attacks survive a threshold trigger.
 const captureProcessor = `
@@ -236,11 +267,19 @@ if(/^Key[A-Z]$/.test(code)){e.preventDefault();held.add(code);const k=code.slice
 window.addEventListener('keyup',e=>{held.delete(e.code);if(/^Key[A-Z]$/.test(e.code)){const k=e.code.slice(3),started=keyCaptureStarted.get(k);keyCaptureStarted.delete(k);if(started!==undefined&&gestureTime(e)-started>=HOLD_GESTURE_MS&&recordKey===k)finishRecording();}renderSteps();if(e.code==='Backquote')recordingUI();if(recordKey&&recorder?.mode!=='tap'&&(e.code==='Key'+recordKey||e.code==='Backquote'))finishRecording()});
 window.addEventListener('blur',()=>{resetPadPointers();held.clear();renderSteps();releaseRecord()});
 $('export').onclick=guard(async()=>{const out={format:'letter-sampler-1',...p,samples:{}};for(const[k,s]of Object.entries(p.samples)){const bytes=new Uint8Array(await s.blob.arrayBuffer());let str='';for(const v of bytes)str+=String.fromCharCode(v);out.samples[k]={...s,blob:undefined,type:s.blob.type,data:btoa(str)}}const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:'application/json'}));a.href=url;a.download='letter-sampler-project-'+(project+1)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
-$('restore').onclick=()=>$('backup').click();$('backup').onchange=guard(async()=>{const f=$('backup').files[0];$('backup').value='';if(!f)return;if(!ready||recorder||pending||importing)throw Error('Finish loading, recording or importing first.');if(f.size>30e6)throw Error('Backup is too large.');const x=JSON.parse(await f.text());if(x.format!=='letter-sampler-1'||!Number.isFinite(x.bpm)||x.bpm<30||x.bpm>300||!Number.isInteger(x.length)||x.length<1||x.length>32||![1,.5,.25].includes(x.division)||!Array.isArray(x.pattern)||![10,32].includes(x.pattern.length)||!x.pattern.every(a=>Array.isArray(a)&&a.every(k=>letters.includes(k)&&k.length===1))||!x.samples)throw Error('Invalid project backup.');await audio();const decoded={};for(const[k,s]of Object.entries(x.samples)){if(k.length!==1||!letters.includes(k)||typeof s.name!=='string')throw Error('Invalid sample.');s.blob=new Blob([Uint8Array.from(atob(s.data),c=>c.charCodeAt(0))],{type:s.type});decoded[k]=await ctx.decodeAudioData(await s.blob.arrayBuffer());if((s.compression!==undefined&&![0,4,8,20].includes(s.compression))||(s.pitch!==undefined&&(!Number.isFinite(s.pitch)||Math.abs(s.pitch)>24))||(s.cutoff!==undefined&&(!Number.isFinite(s.cutoff)||s.cutoff<200||s.cutoff>20000))||(s.pan!==undefined&&(!Number.isFinite(s.pan)||Math.abs(s.pan)>1)))throw Error('Invalid effects settings.');if(decoded[k].duration>12.5||![s.start,s.end,s.gain].every(Number.isFinite)||s.start<0||s.end>decoded[k].duration+.001||s.end<=s.start||s.gain<0||s.gain>1.5)throw Error('Invalid sample settings.');delete s.data;delete s.type}if(!confirm('Replace project '+(project+1)+' with this backup?'))return;stop();p=normalizeProject(x);applyBus();for(const k of Object.keys(buffers))delete buffers[k];for(const k of Object.keys(reversed))delete reversed[k];Object.assign(buffers,decoded);chosen.clear();held.clear();resetDelete();undo=null;$('undo').disabled=true;save();render();say('Project restored.')});
+$('restore').onclick=()=>$('backup').click();$('backup').onchange=guard(async()=>{const f=$('backup').files[0];$('backup').value='';if(!f)return;if(!ready||recorder||pending||importing)throw Error('Finish loading, recording or importing first.');if(f.size>30e6)throw Error('Backup is too large.');const x=JSON.parse(await f.text());if(x.format!=='letter-sampler-1'||!Number.isFinite(x.bpm)||x.bpm<30||x.bpm>300||!Number.isInteger(x.length)||x.length<1||x.length>32||![1,.5,.25].includes(x.division)||!Array.isArray(x.pattern)||![10,32].includes(x.pattern.length)||!x.pattern.every(a=>Array.isArray(a)&&a.every(k=>letters.includes(k)&&k.length===1))||!x.samples)throw Error('Invalid project backup.');await audio();const decoded={};for(const[k,s]of Object.entries(x.samples)){if(k.length!==1||!letters.includes(k)||typeof s.name!=='string')throw Error('Invalid sample.');s.blob=new Blob([Uint8Array.from(atob(s.data),c=>c.charCodeAt(0))],{type:s.type});decoded[k]=await decodeStoredAudio(s.blob);if((s.compression!==undefined&&![0,4,8,20].includes(s.compression))||(s.pitch!==undefined&&(!Number.isFinite(s.pitch)||Math.abs(s.pitch)>24))||(s.cutoff!==undefined&&(!Number.isFinite(s.cutoff)||s.cutoff<200||s.cutoff>20000))||(s.pan!==undefined&&(!Number.isFinite(s.pan)||Math.abs(s.pan)>1)))throw Error('Invalid effects settings.');if(decoded[k].duration>12.5||![s.start,s.end,s.gain].every(Number.isFinite)||s.start<0||s.end>decoded[k].duration+.001||s.end<=s.start||s.gain<0||s.gain>1.5)throw Error('Invalid sample settings.');delete s.data;delete s.type}if(!confirm('Replace project '+(project+1)+' with this backup?'))return;stop();p=normalizeProject(x);applyBus();for(const k of Object.keys(buffers))delete buffers[k];for(const k of Object.keys(reversed))delete reversed[k];Object.assign(buffers,decoded);chosen.clear();held.clear();resetDelete();undo=null;$('undo').disabled=true;save();render();say('Project restored.')});
 render();const opening=indexedDB.open('letter-sampler',1);
 opening.onupgradeneeded=()=>opening.result.createObjectStore('projects');
 opening.onerror=()=>{ready=true;$('saved').textContent='storage unavailable · export to keep work'};
 opening.onsuccess=()=>{db=opening.result;load(0).then(()=>{$('saved').textContent='saved in this browser'}).catch(e=>{fail(e);$('saved').textContent='loading failed · saved data retained'})};
 
-window.addEventListener('pagehide',()=>{resetPadPointers();stop();releaseRecord();releaseMicrophone()});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){resetPadPointers();held.clear();stop();releaseRecord();releaseMicrophone()}});
+function parkAudio(){
+ rebuildOnGesture=true;audioUnlock=null;resetPadPointers();held.clear();recordHeld=false;stop();recordingUI();
+ // A suspended worklet may never acknowledge stop. Cancel unfinished capture
+ // immediately so it cannot trap the instrument in "finishing" after unlock.
+ if(recorder&&recorder.state!=='saving'){resetCapture(recorder);say('Recording interrupted · unfinished take cancelled. Saved samples kept.')}
+ releaseMicrophone();
+}
+window.addEventListener('pagehide',parkAudio);
+window.addEventListener('pageshow',event=>{if(event.persisted){rebuildOnGesture=true;say('Tap a pad or Play to reconnect audio.')}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)parkAudio();else if(rebuildOnGesture)say('Tap a pad or Play to reconnect audio.')});
