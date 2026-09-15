@@ -16,10 +16,10 @@ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>showView(b.dat
 document.querySelectorAll('[data-bank]').forEach(b=>b.onclick=()=>{if(recorder){say('Finish recording first.');return}mobileBank=Number(b.dataset.bank);syncMobile()});
 $('bankSelect').onchange=()=>{if(recorder){$('bankSelect').value=mobileBank;return}mobileBank=Number($('bankSelect').value);syncMobile()};
 $('previous').onclick=()=>selectAdjacent(-1);$('next').onclick=()=>selectAdjacent(1);
-$('audition').onclick=guard(async()=>{await audio();if(buffers[selected])trigger(selected);else say('This pad is empty. Import audio from Files, or record it in Play.')});
+$('audition').onclick=guard(()=>audition(selected));
 // Edit one native field at a time, above the iOS keyboard; never scroll the instrument.
 let editingInput=null;
-for(const id of ['sampleName','start','end','thresholdDb']){
+for(const id of ['sampleName','start','end']){
  const input=$(id),button=document.createElement('button');button.type='button';button.className='value-button';button.dataset.label={bpm:'bpm',sampleName:'name',start:'start seconds',end:'end seconds',thresholdDb:'threshold dBFS'}[id];input.hidden=true;input.after(button);fields.set(input,button);
  button.onclick=()=>{editingInput=input;const field=$('fieldValue');field.type=input.type==='number'?'number':'text';for(const attr of ['min','max','step','maxlength']){if(input.hasAttribute(attr))field.setAttribute(attr,input.getAttribute(attr));else field.removeAttribute(attr)}field.inputMode=input.type==='number'?'decimal':'text';field.value=input.value;$('fieldTitle').textContent=button.dataset.label;$('fieldDialog').showModal();field.focus();field.select()};
 }

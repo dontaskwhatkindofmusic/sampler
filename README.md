@@ -29,3 +29,11 @@ Keyboard: Shift+Y sample FX, Shift+U master, Shift+G sample gain, Space transpor
 ## Recovery changes
 
 Saved audio decodes without waiting for autoplay permission. A playing gesture resumes audio. Failed decodes retain the original stored sample and can retry on a pad tap. Restored trim bounds are clamped to decoded duration. Interrupted pad touches reset correctly. Storage-read failure blocks saves instead of overwriting unread data. Automated logic checks cover persistence recovery, recording gestures, deletion, 32-step mapping and effects; physical iPhone/Safari testing remains necessary to verify device routing.
+
+## Pad recovery and clearing
+
+Setup → Clear All Pads clears only the current project after confirmation; Undo Clear restores that group and its sequence notes. Desktop also supports Shift+Q. Selected/playing buttons use border outlines with no yellow fill. Threshold is a horizontal slider with a live dBFS value.
+
+A named pad whose stored audio is not decoded shows “retry,” rather than pretending it is playable. Both pads and the mobile Listen button retry decoding. Concurrent requests share one decode; deleted/replaced samples cannot be resurrected by late results. Demo drums wait for project loading and block overlapping imports/project changes. Corrupt saved audio is retained for backup/re-import, not silently discarded.
+
+Regression checks: run the files in `tests/` using Node from the repository root. These are logic checks, not a physical iPhone audio test.

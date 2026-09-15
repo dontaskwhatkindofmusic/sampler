@@ -29,3 +29,11 @@ function busLabels(){for(const id of ['busGain','busThreshold','busRatio'])$(id+
 for(const id of ['busGain','busThreshold','busRatio'])$(id).oninput=busLabels;
 $('busApply').onclick=()=>{p.bus={gain:Number($('busGain').value),compressor:$('busComp').checked,threshold:Number($('busThreshold').value),ratio:Number($('busRatio').value)};applyBus();save();$('busDialog').close();say('Master settings saved.')};
 $('busClose').onclick=()=>$('busDialog').close();
+
+$('clearAll').onclick=()=>{
+ if(!ready||recorder||importing){say('Finish loading, recording or importing first.');return}
+ const keys=Object.keys(p.samples);if(!keys.length){say('All pads are already empty.');return}
+ if(!confirm('Clear all pads in project '+(project+1)+'? Undo can restore them.'))return;
+ $('panic').click();chosen.clear();eraseMany(keys);say('All pads cleared in project '+(project+1)+' · Undo available.');
+};
+$('undoAll').onclick=()=>$('undo').click();
