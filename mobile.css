@@ -23,3 +23,9 @@ button,button:active,button[aria-pressed=true]{border-radius:2px}button[data-del
 @media(orientation:landscape) and (max-height:550px){.transport{grid-template-columns:1fr}}
 
 #thresholdDb{width:clamp(80px,20vw,180px);flex:1;min-width:70px;writing-mode:horizontal-tb}#thresholdValue{font-size:12px;white-space:nowrap}button[data-audio=unavailable]{border-style:dashed}
+
+.step-pages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.step-pages button[aria-pressed=true]{outline:3px solid currentColor;outline-offset:-4px;font-weight:bold}#offlineDialog{max-width:440px}#offlineDialog p,#offlineDialog li{font-size:13px;line-height:1.35}#offlineDialog ol{padding-left:20px}#voiceMode{max-width:140px}
+
+.transport{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.transport button{padding:3px;font-size:14px}.banks button{flex:1 1 0;min-width:0}.transport label{justify-content:center}.transport #bpm{width:65px}#view-sample>.line:has(#voiceMode){display:grid;grid-template-columns:1fr 1fr;gap:4px}#view-sample label:has(#voiceMode){grid-column:1/-1}#view-sample #voiceMode{flex:1;max-width:none}@media(orientation:landscape) and (max-height:550px){.transport{grid-template-columns:1fr 1fr}#offlineDialog{max-width:600px}#offlineDialog p,#offlineDialog li{font-size:12px}#offlineDialog ol{margin:6px 0}#view-sample>.line:has(#voiceMode){display:flex;flex-wrap:wrap}}
+
+@media(orientation:landscape) and (max-height:450px){#offlineDialog[open]{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}#offlineDialog h2,#offlineDialog>.line{grid-column:1/-1;margin:0}#offlineDialog ol{grid-column:2;grid-row:2/4}#offlineDialog p{margin:0}#offlineDialog>.line{grid-row:4}}

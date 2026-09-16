@@ -10,3 +10,5 @@ button,button:active,button[aria-pressed=true]{border-radius:2px}button[data-del
 [hidden]{display:none!important}#tutorialPanel{border:1px solid;padding:6px;background:white;color:#171717;min-width:0}#tutorialPanel>div{display:flex;align-items:center;justify-content:space-between;gap:6px}#tutorialPanel p{font-size:12px;line-height:1.3;margin:4px 0}#tutorialPanel strong{font-size:12px}#tutorialPanel button{min-height:30px}body.tutorial-active #status{display:none}.tutorial-target{outline:2px dashed #171717!important;outline-offset:-3px}#tutorialWelcome{max-width:380px}#tutorialWelcome h2{font-size:16px}
 
 #thresholdDb{width:clamp(80px,20vw,180px);flex:1;min-width:70px;writing-mode:horizontal-tb}#thresholdValue{font-size:12px;white-space:nowrap}button[data-audio=unavailable]{border-style:dashed}
+
+.step-pages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.step-pages button[aria-pressed=true]{outline:3px solid currentColor;outline-offset:-4px;font-weight:bold}#offlineDialog{max-width:440px}#offlineDialog p,#offlineDialog li{font-size:13px;line-height:1.35}#offlineDialog ol{padding-left:20px}#voiceMode{max-width:140px}

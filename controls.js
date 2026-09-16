@@ -37,3 +37,5 @@ $('clearAll').onclick=()=>{
  $('panic').click();chosen.clear();eraseMany(keys);say('All pads cleared in project '+(project+1)+' · Undo available.');
 };
 $('undoAll').onclick=()=>$('undo').click();
+
+if(!mobileUI){$('stopSamples').textContent='stop samples [shift+r]';$('voiceMode').title='Repeat mode [shift+j]'}

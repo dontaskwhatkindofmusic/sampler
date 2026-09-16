@@ -45,3 +45,17 @@ The first pad/Play gesture after leaving the page rebuilds the audio output whil
 Saved PCM16 WAV files—including built-in drums and the app's normalized recordings/imports—are read directly into audio buffers, avoiding the browser codec decoder on restoration. Other legacy encodings still use the native decoder. Invalid/truncated files remain preserved and report an error. An unfinished recording is cancelled when the page is hidden, preserving any previous saved sample; a take already being saved can finish.
 
 The screen-lock regression test simulates interruptions, silent/stuck output, a failed codec decoder and hung resume. Physical iPhone verification remains necessary.
+
+## Offline and Home Screen
+
+Setup → Make Available Offline downloads and verifies the complete static instrument using an opt-in service worker. Wait for Ready. The dialog explains Safari → Share → Add to Home Screen and keeping Open as Web App enabled. Open the Home Screen icon online and save offline there too; export/import projects if iOS gives that app separate storage. Saved projects remain in IndexedDB, separate from the replaceable app cache. Browser eviction can remove offline data; backups still matter.
+
+The cache is scoped to this repository's URL path, supports GitHub Pages subpaths and layout query strings, and installs updates as a complete bundle. In Setup, an available update offers Reload Update; playback/recording must be stopped first. Failed downloads preserve the previous offline version. Missing cached assets can be repaired while online. Normal online updates wait until old app windows close, or Reload Update is chosen.
+
+After changing any app asset or the service worker, run `python3 scripts/version-offline.py` before committing, so installed offline copies receive an update. No build dependencies are required.
+
+## Repeat mode and sample stop
+
+Sample → Repeat chooses Layer (poly, the existing/default behavior) or Restart (mono, each hit cuts the previous voice of that pad). The setting persists with each sample and is included in backups. Other pads remain independent. Mono also respects scheduled sequencer hits.
+
+Stop Samples (Shift+R) cuts currently sounding sample voices without stopping the loop, metronome, or upcoming hits. Play/Stop and Esc still stop the full transport. Step pages are four buttons above the steps, with a border on the active page; bracket shortcuts still work. In mobile portrait, Play aligns in width with Bank 1.
