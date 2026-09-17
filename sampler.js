@@ -208,7 +208,7 @@ $('record').onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();document
 $('record').onpointerup=releaseRecord;$('record').onpointercancel=releaseRecord;$('record').onlostpointercapture=releaseRecord;
 $('stopRecord').onclick=finishRecording;
 $('thresholdDb').oninput=$('thresholdDb').onchange=()=>{const value=Number($('thresholdDb').value);$('thresholdDb').value=Number.isFinite(value)?Math.max(-80,Math.min(0,value)):-35;$('thresholdValue').textContent=$('thresholdDb').value+' dBFS';};
-$('clearSelection').onclick=()=>{chosen.clear();renderSteps()};$('clearPattern').onclick=()=>{p.pattern=Array.from({length:32},()=>[]);p.freeNotes=[];save();renderSteps()};$('erase').onclick=()=>erase(selected);$('undo').onclick=()=>{if(!undo)return;Object.assign(p.samples,undo.samples);Object.assign(buffers,undo.buffers);for(const k of Object.keys(undo.samples))delete reversed[k];p.pattern=undo.pattern;p.freeNotes=undo.freeNotes||[];undo=null;$('undo').disabled=true;save();render()};
+$('clearSelection').onclick=()=>{chosen.clear();renderSteps()};$('clearPattern').onclick=()=>{p.pattern=Array.from({length:32},()=>[]);p.freeNotes=[];save();renderSteps()};$('erase').onclick=()=>erase(selected);$('undo').onclick=()=>{if(!undo)return;if(undo.full){restoreSampleEdit();return;}Object.assign(p.samples,undo.samples);Object.assign(buffers,undo.buffers);for(const k of Object.keys(undo.samples))delete reversed[k];p.pattern=undo.pattern;p.freeNotes=undo.freeNotes||[];undo=null;$('undo').disabled=true;save();render()};
 for(const id of ['bpm','length','division'])$(id).onchange=()=>{const value=Number($(id).value);if(!Number.isFinite(value)||value<(id==='bpm'?30:id==='length'?1:.25)||value>(id==='bpm'?300:id==='length'?32:1)){render();return}p[id]=value;nextStep%=p.length;save();render()};
 for(const id of ['sampleName','gain','reverse','start','end','voiceMode'])$(id).onchange=()=>{const s=p.samples[selected];if(!s)return;if(id==='sampleName')s.name=$(id).value||selected;else if(id==='voiceMode')s.voiceMode=$(id).value==='mono'?'mono':'poly';else if(id==='reverse')s.reverse=$(id).checked;else if(id==='gain')s.gain=Number($(id).value);else{const v=Number($(id).value),max=buffers[selected].duration;if(!Number.isFinite(v)||v<0||v>max||(id==='start'?v>=s.end:v<=s.start)){say('Start must be before end, within the sample.');editor();return}s[id]=v}save();render()};
 async function importAudio(file,k){
@@ -237,7 +237,7 @@ async function load(n){
 $('project').onchange=guard(async()=>{if(!ready||recorder||pending||importing){$('project').value=project;throw Error('Finish recording or importing before switching projects.')}await load(Number($('project').value))});
 // One dispatch map keeps mouse actions, shortcuts, and disabled states in sync.
 const commands={
-KeyB:['bpm','focus'],KeyL:['length','focus'],KeyT:['division','focus'],
+Period:['manageOpen','click'],Comma:['themeMode','focus'],Backslash:['selectAllSteps','click'],KeyB:['bpm','focus'],KeyL:['length','focus'],KeyT:['division','focus'],
 KeyK:['quantize','click'],KeyM:['metro','click'],KeyW:['overdub','click'],KeyA:['thresholdOn','click'],KeyF:['thresholdDb','focus'],
 Enter:['stopRecord','click'],KeyC:['cycle','click'],KeyD:['demo','click'],
 KeyN:['sampleName','focus'],KeyI:['import','click'],KeyX:['deleteMode','click'],

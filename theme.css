@@ -1,0 +1,17 @@
+:root{--bg:#ffffff;--fg:#171717;--muted:#555;--border:#777;--backdrop:#ffffffdd;--record:#a00000;color-scheme:light;background:var(--bg)}
+:root[data-theme=dark]{--bg:#171717;--fg:#ededed;--muted:#bdbdbd;--border:#aaa;--backdrop:#171717dd;--record:#ff8585;color-scheme:dark}
+html,body,dialog,#fxDialog,#busDialog,#tutorialPanel{background:var(--bg);color:var(--fg)}
+button,input,select{color:var(--fg);accent-color:var(--fg)}
+button,select,input:not([type=range]):not([type=checkbox]){background-color:var(--bg);border:1px solid var(--border)}
+fieldset,dialog,#fxDialog,#busDialog,#tutorialPanel{border-color:var(--border)}
+footer,.hint,small{color:var(--muted)}
+a{color:inherit}dialog::backdrop,#fxDialog::backdrop{background:var(--backdrop)}
+button:focus-visible,a:focus-visible,.tutorial-target{outline-color:var(--fg)!important}
+#keyboard button.hit{box-shadow:inset 0 0 0 3px var(--fg)}
+button.recording,#keyboard button.recording{color:var(--record);outline-color:var(--record);box-shadow:inset 0 0 0 3px var(--record)}
+button[data-delete=true]{outline-color:var(--record)}
+#manageDialog{max-width:440px}#manageDialog h2{font-size:16px;margin:0 0 10px}#manageDialog p{font-size:13px;line-height:1.4}#manageDialog select{max-width:110px}
+#themeMode{max-width:110px}#view-sequence>.line:has(#selectAllSteps){display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}#view-sequence #selectAllSteps{min-width:0}
+@media(orientation:landscape) and (max-height:450px){#manageDialog{max-width:600px}#manageDialog p{margin:5px 0}#view-sequence>.line:has(#selectAllSteps){grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+#view-sequence>.line:has(#selectAllSteps) button{font-size:12px;padding:3px}#view-sequence>.line:has(#selectAllSteps) label{font-size:11px;gap:3px;min-height:44px}#view-sequence>.line:has(#selectAllSteps) input{width:18px}#view-sample .line:has(#manageOpen) button{font-size:12px;padding:3px}

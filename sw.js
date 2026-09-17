@@ -1,7 +1,7 @@
 'use strict';
 // Regenerate REVISION with scripts/version-offline.py whenever app files change.
-const REVISION = '2009fe91cbb2c666';
-const FILES=['index.html','mobile.html','desktop.css','mobile.css','layout.js','sampler.js','mobile.js','controls.js','tutorial.js','offline.js','manifest.webmanifest'];
+const REVISION = '1f433143d62ac212';
+const FILES=['index.html','mobile.html','desktop.css','mobile.css','layout.js','sampler.js','mobile.js','controls.js','tutorial.js','offline.js','manifest.webmanifest','manage.js','theme.js','theme.css'];
 const BASE=new URL(self.registration.scope);
 const PREFIX='letter-sampler:'+BASE.pathname+':';
 const CACHE=PREFIX+REVISION;

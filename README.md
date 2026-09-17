@@ -73,3 +73,13 @@ Desktop Safari on macOS requests a 48 kHz microphone stream and uses a 48 kHz au
 New recordings and imports retain their original sample rate in mono 16-bit WAV rather than dropping samples to force 22.05 kHz. This avoids aliasing from the previous nearest-neighbor conversion, at the cost of roughly double storage for 44.1/48 kHz recordings. Replacement recordings explicitly start with zero pitch shift, unity sample gain and no sample compressor. Existing recordings and effects are unchanged.
 
 Master compression is now opt-in for new projects. For existing projects, Master → Compression Off immediately bypasses that compressor and saves the change. This leaves sample-level effects intact. If an old recording was captured incorrectly, the app cannot infer its original pitch; test a fresh recording after updating. Automated tone tests verify frequency, duration and RMS through WAV encoding/restoration at 22.05, 44.1, 48 and 96 kHz; the desktop Safari hardware workaround still needs a real MacBook recording test.
+
+## Sample management and selection
+
+Sample → Manage (Shift+.) opens From/To controls. Copy snapshots a sample and its settings into an internal clipboard; Paste duplicates it onto the destination without copying pattern notes. The clipboard lasts for the page session and can paste between projects. Move carries the sample and all of its quantized/unquantized notes to another key. Existing destination notes remain; duplicate grid notes are merged. Replacing a populated destination asks for confirmation. Remove From Pattern clears that pad's notes across all 32 steps without deleting its sound. Undo restores the previous sample/pattern state for the last edit.
+
+All Steps (Shift+backslash) selects every active step across pages, respecting the current sequence length. Release Steps clears selection.
+
+## Theme
+
+Setup → Theme (Shift+comma on desktop) offers System, Dark and Light. System is the initial setting and follows live OS changes; an explicit choice persists on this browser. Native controls use the matching color scheme. The theme-color metadata and standalone iOS status-bar hint follow the background, subject to browser support and the user's browser appearance preferences.

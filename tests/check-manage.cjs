@@ -1,0 +1,20 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+class El{set id(v){this._id=v;els[v]=this}get id(){return this._id}constructor(){this.children=[];this.dataset={};this.value='';this.checked=false;this.classList={add(){},remove(){},toggle(){}}}append(e){this.children.push(e)}add(){}set innerHTML(v){}querySelector(){return this.child??=new El()}setAttribute(k,v){this[k]=v}setPointerCapture(){}focus(){}select(){}click(){return this.onclick?.({detail:0})}showModal(){this.open=true}close(){this.open=false}}
+const els={},events={};let micRequests=0,contexts=0,resumes=0,decodes=0,rejectDecode=false,dbRequest;
+const node=()=>({gain:{value:1},threshold:{value:-24},ratio:{value:12},connect(n){return n},disconnect(){}});
+class Context{constructor(){contexts++;this.state='suspended';this.currentTime=0;this.destination={}}createGain(){return node()}createDynamicsCompressor(){return node()}async resume(){resumes++;this.state='running'}async decodeAudioData(){decodes++;if(rejectDecode)throw Error('decode failed');return {duration:1,sampleRate:44100,length:44100}}}
+const sandbox={console,Blob,URL,Option:class{},Float32Array,Uint8Array,ArrayBuffer,DataView,AudioContext:Context,navigator:{audioSession:{type:'auto'},mediaDevices:{getUserMedia:async()=>{micRequests++;throw Error('should not request on load')}}},document:{documentElement:{dataset:{mobile:'false'}},getElementById:id=>els[id]??=new El(),createElement:()=>new El(),addEventListener(){}},window:{addEventListener:(n,f)=>events[n]=f},indexedDB:{open:()=>({})},setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,clearInterval(){}};
+vm.createContext(sandbox);vm.runInContext(fs.readFileSync('sampler.js','utf8'),sandbox);vm.runInContext(fs.readFileSync('controls.js','utf8'),sandbox);
+const run=s=>vm.runInContext(s,sandbox);sandbox.testDb={transaction:()=>({objectStore:()=>({get:()=>dbRequest={}})})};
+(async()=>{
+ sandbox.themeChoice='system';sandbox.setTheme=()=>{};sandbox.confirm=()=>true;vm.runInContext(fs.readFileSync('manage.js','utf8'),sandbox);run('ready=true;db=null');
+ run("p.samples.K={blob:new Blob(['kick']),name:'kick',pitch:3,gain:.8,voiceMode:'mono'};buffers.K={duration:1};p.samples.S={blob:new Blob(['snare']),name:'snare'};buffers.S={duration:1};p.pattern[0]=['K','S'];p.pattern[31]=['K'];p.freeNotes=[{key:'K',position:2.2},{key:'S',position:3.5}]");
+ assert.equal(run("copySample('K')"),true);assert.equal(run("pasteSample('H')"),true);assert.equal(run('p.samples.H.pitch'),3);run('p.samples.H.pitch=0');assert.equal(run('p.samples.K.pitch'),3);assert.equal(run('p.pattern.flat().includes("H")'),false);
+ run('restoreSampleEdit()');assert.equal(run('p.samples.H'),undefined);
+ sandbox.confirm=()=>false;assert.equal(run("moveSample('K','S')"),false);assert.equal(run('p.samples.S.name'),'snare');sandbox.confirm=()=>true;
+ assert.equal(run("moveSample('K','S')"),true);assert.equal(run('p.samples.K'),undefined);assert.equal(run('p.samples.S.name'),'kick');assert.equal(run('p.pattern[0].join()'),'S');assert.equal(run('p.pattern[31][0]'),'S');assert.equal(run('p.freeNotes[0].key'),'S');run('restoreSampleEdit()');assert.equal(run('p.samples.S.name'),'snare');assert.equal(run('p.samples.K.pitch'),3);
+ assert.equal(run("clearSamplePattern('K')"),true);assert.ok(run('p.samples.K'));assert.equal(run('p.pattern.flat().includes("K")'),false);assert.equal(run('p.freeNotes.some(n=>n.key==="K")'),false);assert.equal(run('p.pattern[0][0]'),'S');run('restoreSampleEdit()');assert.equal(run('p.pattern[31][0]'),'K');
+ run("p.length=32;$('selectAllSteps').onclick()");assert.equal(run('chosen.size'),32);run("p.length=8;$('selectAllSteps').onclick()");assert.equal(run('chosen.size'),8);
+ run('recorder={key:"Q"}');assert.equal(run("pasteSample('H')"),false);assert.equal(run("moveSample('K','H')"),false);
+ console.log('PASS: copy settings isolation, paste without pattern copy, overwrite cancellation, move/remap with note deduplication, sample-preserving pattern removal, whole-edit undo, all active steps and busy-state guards.');
+})().catch(e=>{console.error(e);process.exitCode=1});
