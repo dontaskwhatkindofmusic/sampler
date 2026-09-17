@@ -59,3 +59,9 @@ After changing any app asset or the service worker, run `python3 scripts/version
 Sample → Repeat chooses Layer (poly, the existing/default behavior) or Restart (mono, each hit cuts the previous voice of that pad). The setting persists with each sample and is included in backups. Other pads remain independent. Mono also respects scheduled sequencer hits.
 
 Stop Samples (Shift+R) cuts currently sounding sample voices without stopping the loop, metronome, or upcoming hits. Play/Stop and Esc still stop the full transport. Step pages are four buttons above the steps, with a border on the active page; bracket shortcuts still work. In mobile portrait, Play aligns in width with Bank 1.
+
+## Quantize
+
+Quantize defaults on. Find it in Steps on mobile or Transport on desktop; Shift+K toggles it. With Write Live enabled, On snaps newly played notes to the selected quarter/eighth/sixteenth step grid. Off preserves their timing within the loop, including multiple hits of the same pad in a step. Existing notes are unchanged by the toggle. Timing scales with BPM and step-division changes and is included in browser saves/backups.
+
+Unquantized hits are marked ~ in their step. Select that step and tap the corresponding pad to remove its hits; tapping again places a grid note. Clear Pattern clears both kinds of notes. Shortening a loop preserves notes beyond the new length for later. Live recording is bounded to 4096 unquantized hits per project.
