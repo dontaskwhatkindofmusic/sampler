@@ -39,3 +39,5 @@ $('clearAll').onclick=()=>{
 $('undoAll').onclick=()=>$('undo').click();
 
 if(!mobileUI){$('stopSamples').textContent='stop samples [shift+r]';$('voiceMode').title='Repeat mode [shift+j]'}
+
+$('busDry').onclick=()=>{$('busComp').checked=false;p.bus={...(p.bus||busDefaults()),compressor:false};applyBus();save();say('Master compression off · existing sample effects unchanged.')};

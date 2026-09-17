@@ -10,7 +10,7 @@ First-time visitors are offered a guided tutorial; restart it from Help. The tut
 
 Desktop and touch layouts share index.html and the same four locally saved projects. Tap an empty letter to start recording, then tap again to finish; holding for 350 ms or longer stops on release. Threshold mode waits for sound before capture. Microphone access is requested only for recording or an explicit microphone check. Tracks close after recording to restore normal playback routing. Safari controls whether it asks for permission again.
 
-Tap loaded pads to play. Import an audio file or drag one onto a desktop pad. Recordings/imports are limited to 12 seconds of 22.05 kHz mono WAV. Browser/device latency varies. Samples stay on this device and origin; moving from the old hosted site to GitHub Pages does not transfer browser storage. Export projects from the old site and import them on the new one. Export backups before replacing your deployment.
+Tap loaded pads to play. Import an audio file or drag one onto a desktop pad. Recordings/imports are limited to 12 seconds of mono PCM WAV at the original audio rate. Browser/device latency varies. Samples stay on this device and origin; moving from the old hosted site to GitHub Pages does not transfer browser storage. Export projects from the old site and import them on the new one. Export backups before replacing your deployment.
 
 ## Delete
 
@@ -22,7 +22,7 @@ Choose 1–32 steps, shown in four pages of eight. Old ten-step projects/backups
 
 ## Effects
 
-Sample level is a GainNode. Sample FX includes pitch/speed, optional low-pass filtering, pan, and compressor presets (off, 4:1, 8:1, 20:1; threshold −24 dB). Master settings offer gain and a bypassable DynamicsCompressorNode with threshold and ratio. Default master gain remains 0.65 with compression enabled, matching the previous version. Settings save per project and travel in backups. Master gain/compressor changes affect existing playback; sample effects apply on the next hit.
+Sample level is a GainNode. Sample FX includes pitch/speed, optional low-pass filtering, pan, and compressor presets (off, 4:1, 8:1, 20:1; threshold −24 dB). Master settings offer gain and a bypassable DynamicsCompressorNode with threshold and ratio. Default master gain remains 0.65; compression is off for new projects. Explicitly saved master settings are retained. Settings save per project and travel in backups. Master gain/compressor changes affect existing playback; sample effects apply on the next hit.
 
 Keyboard: Shift+Y sample FX, Shift+U master, Shift+G sample gain, Space transport, Esc stop all, Shift+1–4 projects. Other controls show shortcuts. In dialogs use Tab, arrows and Enter.
 
@@ -65,3 +65,11 @@ Stop Samples (Shift+R) cuts currently sounding sample voices without stopping th
 Quantize defaults on. Find it in Steps on mobile or Transport on desktop; Shift+K toggles it. With Write Live enabled, On snaps newly played notes to the selected quarter/eighth/sixteenth step grid. Off preserves their timing within the loop, including multiple hits of the same pad in a step. Existing notes are unchanged by the toggle. Timing scales with BPM and step-division changes and is included in browser saves/backups.
 
 Unquantized hits are marked ~ in their step. Select that step and tap the corresponding pad to remove its hits; tapping again places a grid note. Clear Pattern clears both kinds of notes. Shortening a loop preserves notes beyond the new length for later. Live recording is bounded to 4096 unquantized hits per project.
+
+## Desktop Safari recording fidelity
+
+Desktop Safari on macOS requests a 48 kHz microphone stream and uses a 48 kHz audio context to reduce clock changes when opening the microphone. iPhone/iPad and other browsers retain their native audio-context configuration. The browser may choose a different microphone track rate; recordings always use the AudioWorklet clock, never the track rate, because Web Audio can resample the input.
+
+New recordings and imports retain their original sample rate in mono 16-bit WAV rather than dropping samples to force 22.05 kHz. This avoids aliasing from the previous nearest-neighbor conversion, at the cost of roughly double storage for 44.1/48 kHz recordings. Replacement recordings explicitly start with zero pitch shift, unity sample gain and no sample compressor. Existing recordings and effects are unchanged.
+
+Master compression is now opt-in for new projects. For existing projects, Master → Compression Off immediately bypasses that compressor and saves the change. This leaves sample-level effects intact. If an old recording was captured incorrectly, the app cannot infer its original pitch; test a fresh recording after updating. Automated tone tests verify frequency, duration and RMS through WAV encoding/restoration at 22.05, 44.1, 48 and 96 kHz; the desktop Safari hardware workaround still needs a real MacBook recording test.
